@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/Close-Encounters-Corps/cec-core/pkg/auth/tokens"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/config"
@@ -29,6 +32,8 @@ type Application struct {
 	Config  *config.Config
 }
 
+var COMMITSHA string
+
 func (app *Application) Start() {
 	for k, v := range app.Modules {
 		log.Println("Starting module", k)
@@ -39,7 +44,7 @@ func (app *Application) Start() {
 	}
 }
 
-func (app *Application) Handler() {
+func (app *Application) Handler() http.Handler {
 	assertErr := func(err error, rw http.ResponseWriter) bool {
 		if err != nil {
 			log.Println(err)
@@ -77,6 +82,7 @@ func (app *Application) Handler() {
 		rw.WriteHeader(http.StatusOK)
 		rw.Write([]byte(token))
 	})
+	return mux
 }
 
 func main() {
@@ -84,6 +90,7 @@ func main() {
 	authsecret := requireEnv("CEC_AUTH_SECRET")
 	authext := requireEnv("CEC_AUTH_EXTERNAL")
 	authint := requireEnv("CEC_AUTH_INTERNAL")
+	listenport := requireEnv("CEC_LISTENPORT")
 	ctx, cancel := context.WithCancel(context.Background())
 	db, err := pgxpool.Connect(ctx, cecdb)
 	if err != nil {
@@ -94,7 +101,7 @@ func main() {
 		Db:      db,
 		Modules: map[string]Module{},
 		Config: &config.Config{
-			AuthSecret: authsecret,
+			AuthSecret:      authsecret,
 			AuthInternalUrl: authint,
 			AuthExternalUrl: authext,
 		},
@@ -104,7 +111,26 @@ func main() {
 	app.Modules[users.MODULE_NAME] = users.NewUserModule(pm)
 	app.Modules[discord.MODULE_NAME] = discord.NewDiscordModule(nil)
 	app.Start()
+	server := http.Server{
+		Addr:    ":" + listenport,
+		Handler: app.Handler(),
+	}
+	go server.ListenAndServe()
+	log.Println("Commit:", COMMITSHA)
+	log.Println("Ready.")
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	<-interrupt
 	cancel()
+	go server.Shutdown(context.TODO())
+	select {
+	case <-interrupt:
+		return
+	case <-time.After(10 * time.Second):
+		return
+	case <-app.Ctx.Done():
+		return
+	}
 }
 
 func requireEnv(name string) string {

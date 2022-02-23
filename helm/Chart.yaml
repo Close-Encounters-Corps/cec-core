@@ -1,0 +1,9 @@
+apiVersion: v2
+name: cec-core
+description: Close Encounters Corps Core system
+maintainers:
+  - name: Igor Ovsyannikov
+    email: kamish@outlook.com
+type: application
+version: 0.1.0
+appVersion: 2.0.0

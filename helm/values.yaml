@@ -1,0 +1,9 @@
+core:
+  auth:
+    external: https://auth-dev.closeencounterscorps.org
+    internal: http://cecc-auth
+    secret: "12345678"
+  db: postgres://postgres:postgres@localhost:5432/cecauth
+image: 
+  name: ghcr.io/close-encounters-corps/cec-core:master
+  secret: ghcr

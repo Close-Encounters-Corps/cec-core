@@ -1,0 +1,45 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}"
+  labels:
+    tier: backend
+    app: core
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      tier: backend
+      app: core
+      release: "{{ .Release.Name }}"
+  template:
+    metadata:
+      labels:
+        tier: backend
+        app: core
+        release: "{{ .Release.Name }}"
+    spec:
+      containers:
+      - name: core
+        image: "{{ .Values.image.name }}"
+        imagePullPolicy: Always
+        ports:
+          - name: http
+            containerPort: 8080
+        env:
+          - name: TZ
+            value: Europe/Moscow
+          - name: CEC_DB
+            value: "{{ .Values.core.db }}"
+          - name: CEC_AUTH_SECRET
+            value: "{{ .Values.core.auth.secret }}"
+          - name: CEC_AUTH_EXTERNAL
+            value: "{{ .Values.core.auth.external }}"
+          - name: CEC_AUTH_INTERNAL
+            value: "{{ .Values.core.auth.internal }}"
+          - name: CEC_LISTENPORT
+            value: "8080"
+      imagePullSecrets:
+        - name: "{{ .Values.image.secret }}"

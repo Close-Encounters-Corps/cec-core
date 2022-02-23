@@ -1,0 +1,18 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ .Release.Name }}"
+  labels:
+    tier: backend
+    app: core
+    release: "{{ .Release.Name }}"
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    tier: backend
+    app: core
+    release: "{{ .Release.Name }}"
