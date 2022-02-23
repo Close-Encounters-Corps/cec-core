@@ -3,7 +3,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY cmd ./cmd
+COPY cmd .
 ARG COMMITSHA
 RUN go build -ldflags "-X main.COMMITSHA=$COMMITSHA" -o cec-core cmd/main.go
 
