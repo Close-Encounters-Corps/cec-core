@@ -3,21 +3,23 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
+	"strconv"
 
+	"github.com/Close-Encounters-Corps/cec-core/gen/models"
+	"github.com/Close-Encounters-Corps/cec-core/gen/restapi"
+	"github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations"
+	"github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations/auth"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/auth/tokens"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/config"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/discord"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/facades"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/principal"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/users"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-openapi/loads"
+	"github.com/go-openapi/runtime/middleware"
+	"github.com/go-openapi/swag"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -44,45 +46,53 @@ func (app *Application) Start() {
 	}
 }
 
-func (app *Application) Handler() http.Handler {
-	assertErr := func(err error, rw http.ResponseWriter) bool {
-		if err != nil {
-			log.Println(err)
-			rw.WriteHeader(http.StatusInternalServerError)
-		}
-		return err != nil
+func (app *Application) Server() (*restapi.Server, error) {
+	swagger, err := loads.Analyzed(restapi.SwaggerJSON, "")
+	if err != nil {
+		return nil, err
 	}
 	dm := app.Modules[discord.MODULE_NAME].(*discord.DiscordModule)
 	um := app.Modules[users.MODULE_NAME].(*users.UserModule)
 	tm := app.Modules[tokens.MODULE_NAME].(*tokens.TokenModule)
 	facade := facades.NewCoreFacade(app.Db, um, dm, tm, app.Config)
-	mux := chi.NewMux()
-	mux.Use(middleware.Logger)
-	// Login using Discord.
-	// If state is not provided, then it will return token instead of auth URL
-	mux.HandleFunc("/login/discord", func(rw http.ResponseWriter, r *http.Request) {
-		state := r.URL.Query().Get("state")
-		if state == "" {
-			u, err := url.Parse(app.Config.AuthExternalUrl)
-			if assertErr(err, rw) {
-				return
+	api := operations.NewCecCoreAPI(swagger)
+	api.AuthLoginDiscordHandler = auth.LoginDiscordHandlerFunc(
+		func(ldp auth.LoginDiscordParams) middleware.Responder {
+			state := swag.StringValue(ldp.State)
+			if state == "" {
+				// respond with cec-auth url as nextURL
+				u, err := url.Parse(app.Config.AuthExternalUrl)
+				if err != nil {
+					log.Println(err)
+					return auth.NewLoginDiscordInternalServerError()
+				}
+				u, err = u.Parse("/oauth/discord")
+				if err != nil {
+					log.Println(err)
+					return auth.NewLoginDiscordInternalServerError()
+				}
+				u.Query().Add("redirect_url", swag.StringValue(ldp.SuccessURL))
+				result := models.AuthPhaseResult{
+					Phase:   1,
+					NextURL: u.String(),
+				}
+				return auth.NewLoginDiscordOK().WithPayload(&result)
 			}
-			u, err = u.Parse("/oauth/discord")
-			if assertErr(err, rw) {
-				return
+			token, err := facade.Authenticate(ldp.HTTPRequest.Context(), "discord", state)
+			if err != nil {
+				log.Println(err)
+				return auth.NewLoginDiscordInternalServerError()
 			}
-			rw.WriteHeader(http.StatusOK)
-			rw.Write([]byte(u.String()))
-			return
-		}
-		token, err := facade.Authenticate(r.Context(), "discord", state)
-		if assertErr(err, rw) {
-			return
-		}
-		rw.WriteHeader(http.StatusOK)
-		rw.Write([]byte(token))
-	})
-	return mux
+			result := models.AuthPhaseResult{
+				Phase: 2,
+				Token: token,
+			}
+			return auth.NewLoginDiscordOK().WithPayload(&result)
+		},
+	)
+	server := restapi.NewServer(api)
+	server.Port = app.Config.Listen
+	return server, nil
 }
 
 func main() {
@@ -96,11 +106,16 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	port, err := strconv.Atoi(listenport)
+	if err != nil {
+		log.Fatalln(err)
+	}
 	app := Application{
 		Ctx:     ctx,
 		Db:      db,
 		Modules: map[string]Module{},
 		Config: &config.Config{
+			Listen:          port,
 			AuthSecret:      authsecret,
 			AuthInternalUrl: authint,
 			AuthExternalUrl: authext,
@@ -111,25 +126,16 @@ func main() {
 	app.Modules[users.MODULE_NAME] = users.NewUserModule(pm)
 	app.Modules[discord.MODULE_NAME] = discord.NewDiscordModule(nil)
 	app.Start()
-	server := http.Server{
-		Addr:    ":" + listenport,
-		Handler: app.Handler(),
+	server, err := app.Server()
+	if err != nil {
+		log.Fatalln(err)
 	}
-	go server.ListenAndServe()
+	defer server.Shutdown()
 	log.Println("Commit:", COMMITSHA)
 	log.Println("Ready.")
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	<-interrupt
-	cancel()
-	go server.Shutdown(context.TODO())
-	select {
-	case <-interrupt:
-		return
-	case <-time.After(10 * time.Second):
-		return
-	case <-app.Ctx.Done():
-		return
+	if err := server.Serve(); err != nil {
+		cancel()
+		log.Fatalln(err)
 	}
 }
 

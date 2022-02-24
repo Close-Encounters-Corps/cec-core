@@ -15,6 +15,12 @@ CREATE TABLE users (
     principal_id BIGINT NOT NULL REFERENCES principals(id)
 );
 
+CREATE TABLE access_tokens (
+    principal_id BIGINT NOT NULL REFERENCES principals(id),
+    token VARCHAR NOT NULL,
+    expires TIMESTAMP WITH TIME ZONE
+);
+
 CREATE TABLE discord_accounts (
     id BIGSERIAL NOT NULL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -26,7 +32,7 @@ CREATE TABLE discord_accounts (
     token_type VARCHAR(16),
     token_expires_in TIMESTAMP WITH TIME ZONE NOT NULL,
     refresh_token TEXT NOT NULL
-)
+);
 CREATE TABLE frontier_accounts (
     id BIGSERIAL NOT NULL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

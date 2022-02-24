@@ -1,0 +1,86 @@
+---
+swagger: "2.0"
+info:
+  description: |
+    The Core of a CEC Platform v2.
+    This service manages everything about factions, users/principals and access tokens. 
+    Find more at Close Encounters Corps Discord server!
+  version: "0.1.0"
+  title: "CEC Core"
+basePath: "/v1"
+tags:
+- name: "auth"
+  description: "Authentication stuff"
+schemes:
+- "https"
+- "http"
+paths:
+  /login/discord:
+    get:
+      tags:
+      - "auth"
+      summary: "Authenticate using Discord"
+      description: | 
+        Creates new Principal/User/Account using Discord.
+        Works in two phases: 
+        1. At first request it returns url to cec-auth.
+        2. When cec-auth redirects you back to Core with state param, it responds with created user info
+           and your shiny new token.
+        2.1. If you already authenticated, then discord account will just be attached to existing user.
+      operationId: "loginDiscord"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "query"
+        name: "state"
+        type: "string"
+        description: "Second phase: State to fetch from CEC Auth"
+        required: false
+      - in: "query"
+        name: "success_url"
+        type: "string"
+        description: "First phase: URL to redirect on a success of the second phase"
+        required: false
+      responses:
+        "500":
+          description: "Internal error"
+        "200":
+          description: "Phase successful"
+          schema:
+            type: string
+            $ref: "#/definitions/AuthPhaseResult"
+definitions:
+  AuthPhaseResult:
+    type: object
+    properties:
+      phase:
+        type: integer
+        format: int32
+      next_url:
+        type: string
+      token:
+        type: string
+      user:
+        $ref: "#/definitions/User"
+  User:
+    type: object
+    properties:
+      id:
+        type: integer
+        format: int64
+      principal:
+        $ref: "#/definitions/Principal"
+  Principal:
+    type: object
+    properties:
+      id:
+        type: integer
+        format: int64
+      admin:
+        type: boolean
+      created_on:
+        type: string
+      last_login:
+        type: string
+      state:
+        type: string

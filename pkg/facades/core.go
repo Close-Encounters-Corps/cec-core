@@ -95,7 +95,7 @@ func (f *CoreFacade) Authenticate(ctx context.Context, kind string, state string
 				if err != nil {
 					return "", err
 				}
-				// 2.2. then create account and associate it with user
+				// then create account and associate it with user
 				id, err := f.discord.NewAccount(ctx, account, usr.Id, tx)
 				if err != nil {
 					return "", err
@@ -103,7 +103,7 @@ func (f *CoreFacade) Authenticate(ctx context.Context, kind string, state string
 				account.Id = id
 				usr.Discord = account
 			}
-			// 3.
+			// create new token as its not authenticated in system atm
 			token, err = f.tokens.NewToken(ctx, usr.Principal, tx)
 			if err != nil {
 				return "", err
