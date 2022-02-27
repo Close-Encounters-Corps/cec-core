@@ -31,6 +31,9 @@ func (m *UserModule) Start(ctx context.Context) error {
 func (m *UserModule) NewUser(ctx context.Context, tx pgx.Tx) (*items.User, error) {
 	usr := items.User{}
 	princ, err := m.pm.NewPrincipal(ctx, tx)
+	if err != nil {
+		return nil, fmt.Errorf("error creating principal: %w", err)
+	}
 	err = tx.QueryRow(ctx, `
 	INSERT INTO users(principal_id) VALUES ($1)
 	RETURNING id

@@ -31,6 +31,10 @@ spec:
         env:
           - name: TZ
             value: Europe/Moscow
+          - name: CEC_ENVIRONMENT
+            value: "{{ .Values.core.env }}"
+          - name: CEC_JAEGER
+            value: "{{ .Values.jaeger.url }}"
           - name: CEC_DB
             value: "{{ .Values.core.db }}"
           - name: CEC_AUTH_SECRET

@@ -16,6 +16,7 @@ import (
 	"github.com/Close-Encounters-Corps/cec-core/pkg/discord"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/facades"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/principal"
+	"github.com/Close-Encounters-Corps/cec-core/pkg/tracer"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/users"
 	"github.com/go-openapi/loads"
 	"github.com/go-openapi/runtime/middleware"
@@ -32,9 +33,12 @@ type Application struct {
 	Db      *pgxpool.Pool
 	Modules map[string]Module
 	Config  *config.Config
+	Tracer  *tracer.Tracer
 }
 
 var COMMITSHA string
+var APPLICATION_NAME = "cec-core"
+var VERSION = "0.1.0"
 
 func (app *Application) Start() {
 	for k, v := range app.Modules {
@@ -58,30 +62,47 @@ func (app *Application) Server() (*restapi.Server, error) {
 	api := operations.NewCecCoreAPI(swagger)
 	api.AuthLoginDiscordHandler = auth.LoginDiscordHandlerFunc(
 		func(ldp auth.LoginDiscordParams) middleware.Responder {
+			ctx, span := tracer.NewSpan(ldp.HTTPRequest.Context(), "/login/discord", nil)
+			defer span.End()
+			traceId := span.SpanContext().TraceID().String()
+			internalError := func(err error) middleware.Responder {
+				tracer.AddSpanError(span, err)
+				tracer.FailSpan(span, "internal error")
+				log.Printf("[%s] error: %s", traceId, err)
+				return auth.NewLoginDiscordInternalServerError().WithPayload(&models.Error{
+					RequestID: traceId,
+				})
+			}
 			state := swag.StringValue(ldp.State)
 			if state == "" {
 				// respond with cec-auth url as nextURL
 				u, err := url.Parse(app.Config.AuthExternalUrl)
 				if err != nil {
-					log.Println(err)
-					return auth.NewLoginDiscordInternalServerError()
+					return internalError(err)
 				}
 				u, err = u.Parse("/oauth/discord")
 				if err != nil {
-					log.Println(err)
-					return auth.NewLoginDiscordInternalServerError()
+					return internalError(err)
 				}
-				u.Query().Add("redirect_url", swag.StringValue(ldp.SuccessURL))
+				q := u.Query()
+				q.Add("redirect_url", swag.StringValue(ldp.SuccessURL))
+				u.RawQuery = q.Encode()
 				result := models.AuthPhaseResult{
 					Phase:   1,
 					NextURL: u.String(),
 				}
 				return auth.NewLoginDiscordOK().WithPayload(&result)
 			}
-			token, err := facade.Authenticate(ldp.HTTPRequest.Context(), "discord", state)
+			tracer.AddSpanTags(span, map[string]string{"state": state})
+			token, err := facade.Authenticate(ctx, "discord", state)
 			if err != nil {
-				log.Println(err)
-				return auth.NewLoginDiscordInternalServerError()
+				if err.Error() == "state not found" {
+					return auth.NewLoginDiscordBadRequest().WithPayload(&models.Error{
+						Message: "state not found",
+						RequestID: traceId,
+					})
+				}
+				return internalError(err)
 			}
 			result := models.AuthPhaseResult{
 				Phase: 2,
@@ -91,12 +112,16 @@ func (app *Application) Server() (*restapi.Server, error) {
 		},
 	)
 	server := restapi.NewServer(api)
+	server.ConfigureAPI()
+	server.SetHandler(tracer.HTTPHandler(server.GetHandler(), "/v1"))
 	server.Port = app.Config.Listen
 	return server, nil
 }
 
 func main() {
+	env := requireEnv("CEC_ENVIRONMENT")
 	cecdb := requireEnv("CEC_DB")
+	jaeger := requireEnv("CEC_JAEGER")
 	authsecret := requireEnv("CEC_AUTH_SECRET")
 	authext := requireEnv("CEC_AUTH_EXTERNAL")
 	authint := requireEnv("CEC_AUTH_INTERNAL")
@@ -121,10 +146,21 @@ func main() {
 			AuthExternalUrl: authext,
 		},
 	}
+	app.Tracer, err = tracer.SetupTracing(&tracer.TracerConfig{
+		ServiceName: APPLICATION_NAME,
+		ServiceVer:  VERSION,
+		Jaeger:      jaeger,
+		Environment: env,
+		Disabled:    false,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
 	pm := principal.NewPrincipalModule()
 	app.Modules[principal.MODULE_NAME] = pm
 	app.Modules[users.MODULE_NAME] = users.NewUserModule(pm)
 	app.Modules[discord.MODULE_NAME] = discord.NewDiscordModule(nil)
+	app.Modules[tokens.MODULE_NAME] = tokens.NewTokenModule()
 	app.Start()
 	server, err := app.Server()
 	if err != nil {

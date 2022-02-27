@@ -6,19 +6,17 @@ import (
 
 	"github.com/Close-Encounters-Corps/cec-core/pkg/items"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 var MODULE_NAME = "tokens"
 
 const TOKEN_SIZE = 32
 
-func NewTokenModule(db pgxpool.Pool) *TokenModule {
+func NewTokenModule() *TokenModule {
 	return &TokenModule{}
 }
 
 type TokenModule struct {
-
 }
 
 func (m *TokenModule) Start(ctx context.Context) error {

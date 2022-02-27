@@ -57,6 +57,50 @@ func (o *LoginDiscordOK) WriteResponse(rw http.ResponseWriter, producer runtime.
 	}
 }
 
+// LoginDiscordBadRequestCode is the HTTP code returned for type LoginDiscordBadRequest
+const LoginDiscordBadRequestCode int = 400
+
+/*LoginDiscordBadRequest User input error
+
+swagger:response loginDiscordBadRequest
+*/
+type LoginDiscordBadRequest struct {
+
+	/*
+	  In: Body
+	*/
+	Payload *models.Error `json:"body,omitempty"`
+}
+
+// NewLoginDiscordBadRequest creates LoginDiscordBadRequest with default headers values
+func NewLoginDiscordBadRequest() *LoginDiscordBadRequest {
+
+	return &LoginDiscordBadRequest{}
+}
+
+// WithPayload adds the payload to the login discord bad request response
+func (o *LoginDiscordBadRequest) WithPayload(payload *models.Error) *LoginDiscordBadRequest {
+	o.Payload = payload
+	return o
+}
+
+// SetPayload sets the payload to the login discord bad request response
+func (o *LoginDiscordBadRequest) SetPayload(payload *models.Error) {
+	o.Payload = payload
+}
+
+// WriteResponse to the client
+func (o *LoginDiscordBadRequest) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
+
+	rw.WriteHeader(400)
+	if o.Payload != nil {
+		payload := o.Payload
+		if err := producer.Produce(rw, payload); err != nil {
+			panic(err) // let the recovery middleware deal with this
+		}
+	}
+}
+
 // LoginDiscordInternalServerErrorCode is the HTTP code returned for type LoginDiscordInternalServerError
 const LoginDiscordInternalServerErrorCode int = 500
 
@@ -65,6 +109,11 @@ const LoginDiscordInternalServerErrorCode int = 500
 swagger:response loginDiscordInternalServerError
 */
 type LoginDiscordInternalServerError struct {
+
+	/*
+	  In: Body
+	*/
+	Payload *models.Error `json:"body,omitempty"`
 }
 
 // NewLoginDiscordInternalServerError creates LoginDiscordInternalServerError with default headers values
@@ -73,10 +122,25 @@ func NewLoginDiscordInternalServerError() *LoginDiscordInternalServerError {
 	return &LoginDiscordInternalServerError{}
 }
 
+// WithPayload adds the payload to the login discord internal server error response
+func (o *LoginDiscordInternalServerError) WithPayload(payload *models.Error) *LoginDiscordInternalServerError {
+	o.Payload = payload
+	return o
+}
+
+// SetPayload sets the payload to the login discord internal server error response
+func (o *LoginDiscordInternalServerError) SetPayload(payload *models.Error) {
+	o.Payload = payload
+}
+
 // WriteResponse to the client
 func (o *LoginDiscordInternalServerError) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
 
-	rw.Header().Del(runtime.HeaderContentType) //Remove Content-Type on empty responses
-
 	rw.WriteHeader(500)
+	if o.Payload != nil {
+		payload := o.Payload
+		if err := producer.Produce(rw, payload); err != nil {
+			panic(err) // let the recovery middleware deal with this
+		}
+	}
 }

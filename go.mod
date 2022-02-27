@@ -3,7 +3,6 @@ module github.com/Close-Encounters-Corps/cec-core
 go 1.17
 
 require (
-	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-openapi/errors v0.20.2
 	github.com/go-openapi/loads v0.21.1
 	github.com/go-openapi/runtime v0.23.1
@@ -12,6 +11,11 @@ require (
 	github.com/go-openapi/swag v0.21.1
 	github.com/jackc/pgx/v4 v4.15.0
 	github.com/jessevdk/go-flags v1.5.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.29.0
+	go.opentelemetry.io/otel v1.4.1
+	go.opentelemetry.io/otel/exporters/jaeger v1.4.1
+	go.opentelemetry.io/otel/sdk v1.4.1
+	go.opentelemetry.io/otel/trace v1.4.1
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 )
 
@@ -20,6 +24,9 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/docker/go-units v0.4.0 // indirect
+	github.com/felixge/httpsnoop v1.0.2 // indirect
+	github.com/go-logr/logr v1.2.2 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/analysis v0.21.2 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.6 // indirect
@@ -38,6 +45,8 @@ require (
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	go.mongodb.org/mongo-driver v1.8.3 // indirect
+	go.opentelemetry.io/otel/internal/metric v0.27.0 // indirect
+	go.opentelemetry.io/otel/metric v0.27.0 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
 	golang.org/x/text v0.3.7 // indirect

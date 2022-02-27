@@ -3,6 +3,7 @@ package facades
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,8 +14,11 @@ import (
 	"github.com/Close-Encounters-Corps/cec-core/pkg/config"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/discord"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/items"
+	"github.com/Close-Encounters-Corps/cec-core/pkg/tracer"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/users"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var CORE_FACADE = "auth_facade"
@@ -48,15 +52,30 @@ type CoreFacade struct {
 }
 
 func (f *CoreFacade) Authenticate(ctx context.Context, kind string, state string) (string, error) {
+	ctx, span := tracer.NewSpan(ctx, "core.authenticate", nil)
+	defer span.End()
 	tx, err := f.db.Begin(ctx)
+	span.AddEvent("tx.begin")
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		span.AddEvent("tx.rollback")
+		tx.Rollback(ctx)
+	}()
 	authUrl, err := url.Parse(f.config.AuthInternalUrl)
 	if err != nil {
 		return "", err
 	}
+	authUrl, err = authUrl.Parse("/api/exchange")
+	if err != nil {
+		return "", err
+	}
+	q := authUrl.Query()
+	q.Add("secret", f.config.AuthSecret)
+	q.Add("state", state)
+	q.Add("kind", kind)
+	authUrl.RawQuery = q.Encode()
 	req, err := http.NewRequest("GET", authUrl.String(), nil)
 	if err != nil {
 		return "", err
@@ -65,13 +84,29 @@ func (f *CoreFacade) Authenticate(ctx context.Context, kind string, state string
 	if err != nil {
 		return "", err
 	}
-	var oauth auth.OauthToken
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
+	if resp.StatusCode != http.StatusOK {
+		span.AddEvent("response error", trace.WithAttributes(
+			attribute.Int("response.code", resp.StatusCode),
+			attribute.String("response.body", string(body)),
+		))
+		if resp.StatusCode == http.StatusBadRequest {
+			switch string(body) {
+			case "state_not_found":
+				return "", fmt.Errorf("state not found")
+			}
+		}
+		return "", fmt.Errorf("cec-auth request failed")
+	}
+	var oauth auth.OauthToken
 	err = json.Unmarshal(body, &oauth)
 	if err != nil {
+		span.AddEvent("error decoding body", trace.WithAttributes(
+			attribute.String("response.body", string(body)),
+		))
 		return "", err
 	}
 	var token string
@@ -87,9 +122,12 @@ func (f *CoreFacade) Authenticate(ctx context.Context, kind string, state string
 		usr, found := auth.FromContext(ctx)
 		// not found
 		if !found {
+			span.AddEvent("discord not found")
 			// find existing discord account
 			usr, err = f.discord.FindUser(ctx, account.Username, tx)
+			msg := "user found"
 			if usr == nil {
+				span.AddEvent("create new user")
 				// not found? firstly, create user
 				usr, err = f.users.NewUser(ctx, tx)
 				if err != nil {
@@ -102,17 +140,25 @@ func (f *CoreFacade) Authenticate(ctx context.Context, kind string, state string
 				}
 				account.Id = id
 				usr.Discord = account
+				msg = "user created"
 			}
+			span.AddEvent(msg, trace.WithAttributes(
+				attribute.Int64("user.id", int64(usr.Id)),
+				attribute.Int64("principal.id", int64(usr.Principal.Id)),
+			))
 			// create new token as its not authenticated in system atm
 			token, err = f.tokens.NewToken(ctx, usr.Principal, tx)
 			if err != nil {
 				return "", err
 			}
+			span.AddEvent("token created")
 		}
 		err = f.users.Authenticate(ctx, usr.Id, tx)
 		if err != nil {
 			return "", err
 		}
+		span.AddEvent("authenticated successfully")
 	}
-	return token, tx.Commit(ctx)
+	err = tx.Commit(ctx)
+	return token, err
 }

@@ -11,9 +11,6 @@ basePath: "/v1"
 tags:
 - name: "auth"
   description: "Authentication stuff"
-schemes:
-- "https"
-- "http"
 paths:
   /login/discord:
     get:
@@ -44,12 +41,25 @@ paths:
       responses:
         "500":
           description: "Internal error"
+          schema:
+            $ref: "#/definitions/Error"
         "200":
           description: "Phase successful"
           schema:
-            type: string
             $ref: "#/definitions/AuthPhaseResult"
+        "400":
+          description: "User input error"
+          schema:
+            $ref: "#/definitions/Error"
+
 definitions:
+  Error:
+    type: object
+    properties:
+      request_id:
+        type: string
+      message:
+        type: string
   AuthPhaseResult:
     type: object
     properties:

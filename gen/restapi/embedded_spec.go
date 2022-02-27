@@ -18,10 +18,6 @@ var (
 
 func init() {
 	SwaggerJSON = json.RawMessage([]byte(`{
-  "schemes": [
-    "https",
-    "http"
-  ],
   "swagger": "2.0",
   "info": {
     "description": "The Core of a CEC Platform v2.\nThis service manages everything about factions, users/principals and access tokens. \nFind more at Close Encounters Corps Discord server!\n",
@@ -59,12 +55,20 @@ func init() {
           "200": {
             "description": "Phase successful",
             "schema": {
-              "type": "string",
               "$ref": "#/definitions/AuthPhaseResult"
             }
           },
+          "400": {
+            "description": "User input error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
           "500": {
-            "description": "Internal error"
+            "description": "Internal error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
           }
         }
       }
@@ -86,6 +90,17 @@ func init() {
         },
         "user": {
           "$ref": "#/definitions/User"
+        }
+      }
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
         }
       }
     },
@@ -131,10 +146,6 @@ func init() {
   ]
 }`))
 	FlatSwaggerJSON = json.RawMessage([]byte(`{
-  "schemes": [
-    "https",
-    "http"
-  ],
   "swagger": "2.0",
   "info": {
     "description": "The Core of a CEC Platform v2.\nThis service manages everything about factions, users/principals and access tokens. \nFind more at Close Encounters Corps Discord server!\n",
@@ -172,12 +183,20 @@ func init() {
           "200": {
             "description": "Phase successful",
             "schema": {
-              "type": "string",
               "$ref": "#/definitions/AuthPhaseResult"
             }
           },
+          "400": {
+            "description": "User input error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
           "500": {
-            "description": "Internal error"
+            "description": "Internal error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
           }
         }
       }
@@ -199,6 +218,17 @@ func init() {
         },
         "user": {
           "$ref": "#/definitions/User"
+        }
+      }
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
         }
       }
     },
