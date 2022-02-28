@@ -6,15 +6,12 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  REPO: ${{ github.repository }}
+  IMAGE_NAME: close-encounters-corps/cec-core
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: downcase REPO
-        run: |
-          echo "IMAGE_NAME=${REPO,,}" >>${GITHUB_ENV}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
       - name: Setup docker
