@@ -42,6 +42,7 @@ func (m *UserModule) NewUser(ctx context.Context, tx pgx.Tx) (*items.User, error
 		return nil, err
 	}
 	log.Println("created new user with id", usr.Id)
+	usr.Principal = princ
 	return &usr, nil
 }
 
@@ -52,10 +53,10 @@ func (m *UserModule) FindOne(ctx context.Context, id uint64, tx pgx.Tx) (*items.
 		Principal: p,
 	}
 	err := tx.QueryRow(ctx, `
-	SELECT p.id, p.admin, p.created_on, p.last_login, p.state 
+	SELECT p.id, p.is_admin, p.created_on, p.last_login, p.state 
 	FROM users u
 	JOIN principals p ON u.principal_id = p.id
-	WHERE id = $1
+	WHERE u.id = $1
 	`, id).Scan(&p.Id, &p.Admin, &p.CreatedOn, &p.LastLogin, &p.State)
 	if err != nil {
 		return nil, err

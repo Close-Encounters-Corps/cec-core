@@ -125,6 +125,9 @@ func (f *CoreFacade) Authenticate(ctx context.Context, kind string, state string
 			span.AddEvent("discord not found")
 			// find existing discord account
 			usr, err = f.discord.FindUser(ctx, account.Username, tx)
+			if err != nil {
+				return "", err
+			}
 			msg := "user found"
 			if usr == nil {
 				span.AddEvent("create new user")

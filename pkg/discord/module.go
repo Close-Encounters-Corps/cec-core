@@ -104,7 +104,7 @@ func (m *DiscordModule) FindUser(ctx context.Context, username string, tx pgx.Tx
 	pr := &items.Principal{}
 	usr := &items.User{}
 	dis := &items.DiscordAccount{}
-	err := tx.QueryRow(ctx, `
+	rows, err := tx.Query(ctx, `
 	SELECT
 		u.id,
 		pr.id,
@@ -115,24 +115,41 @@ func (m *DiscordModule) FindUser(ctx context.Context, username string, tx pgx.Tx
 		dis.id,
 		dis.username,
 		dis.created,
+		dis.updated,
 		dis.api_response
-	) FROM users usr
-	JOIN discord_accounts dis ON usr.id = dis.user_id
+	FROM users u
+	JOIN discord_accounts dis ON u.id = dis.user_id
 	JOIN principals pr ON pr.id = u.principal_id
 	WHERE dis.username = $1
-	`, username).Scan(
-		&usr.Id,
-		&pr.Id,
-		&pr.Admin,
-		&pr.CreatedOn,
-		&pr.LastLogin,
-		&pr.State,
-		&dis.Id,
-		&dis.Username,
-		&dis.Created,
-		&dis.Updated,
-		&dis.ApiResponse,
-	)
+	`, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if usr.Id != 0 {
+			return nil, fmt.Errorf("more than 1 user returned")
+		}
+		rows.Scan(
+			&usr.Id,
+			&pr.Id,
+			&pr.Admin,
+			&pr.CreatedOn,
+			&pr.LastLogin,
+			&pr.State,
+			&dis.Id,
+			&dis.Username,
+			&dis.Created,
+			&dis.Updated,
+			&dis.ApiResponse,
+		)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if usr.Id == 0 {
+		return nil, nil // user not found -- not an error!
+	}
 	if err != nil {
 		return nil, err
 	}
