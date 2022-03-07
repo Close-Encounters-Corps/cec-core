@@ -72,122 +72,33 @@ func init() {
           }
         }
       }
-    }
-  },
-  "definitions": {
-    "AuthPhaseResult": {
-      "type": "object",
-      "properties": {
-        "next_url": {
-          "type": "string"
-        },
-        "phase": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "token": {
-          "type": "string"
-        },
-        "user": {
-          "$ref": "#/definitions/User"
-        }
-      }
     },
-    "Error": {
-      "type": "object",
-      "properties": {
-        "message": {
-          "type": "string"
-        },
-        "request_id": {
-          "type": "string"
-        }
-      }
-    },
-    "Principal": {
-      "type": "object",
-      "properties": {
-        "admin": {
-          "type": "boolean"
-        },
-        "created_on": {
-          "type": "string"
-        },
-        "id": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "last_login": {
-          "type": "string"
-        },
-        "state": {
-          "type": "string"
-        }
-      }
-    },
-    "User": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "principal": {
-          "$ref": "#/definitions/Principal"
-        }
-      }
-    }
-  },
-  "tags": [
-    {
-      "description": "Authentication stuff",
-      "name": "auth"
-    }
-  ]
-}`))
-	FlatSwaggerJSON = json.RawMessage([]byte(`{
-  "swagger": "2.0",
-  "info": {
-    "description": "The Core of a CEC Platform v2.\nThis service manages everything about factions, users/principals and access tokens. \nFind more at Close Encounters Corps Discord server!\n",
-    "title": "CEC Core",
-    "version": "0.1.0"
-  },
-  "basePath": "/v1",
-  "paths": {
-    "/login/discord": {
+    "/users/current": {
       "get": {
-        "description": "Creates new Principal/User/Account using Discord.\nWorks in two phases: \n1. At first request it returns url to cec-auth.\n2. When cec-auth redirects you back to Core with state param, it responds with created user info\n   and your shiny new token.\n2.1. If you already authenticated, then discord account will just be attached to existing user.\n",
         "produces": [
           "application/json"
         ],
         "tags": [
-          "auth"
+          "users"
         ],
-        "summary": "Authenticate using Discord",
-        "operationId": "loginDiscord",
+        "summary": "Get current user",
         "parameters": [
           {
             "type": "string",
-            "description": "Second phase: State to fetch from CEC Auth",
-            "name": "state",
-            "in": "query"
-          },
-          {
-            "type": "string",
-            "description": "First phase: URL to redirect on a success of the second phase",
-            "name": "success_url",
-            "in": "query"
+            "description": "Auth token",
+            "name": "X-Auth-Token",
+            "in": "header"
           }
         ],
         "responses": {
           "200": {
-            "description": "Phase successful",
+            "description": "User found",
             "schema": {
-              "$ref": "#/definitions/AuthPhaseResult"
+              "$ref": "#/definitions/User"
             }
           },
           "400": {
-            "description": "User input error",
+            "description": "Invalid token",
             "schema": {
               "$ref": "#/definitions/Error"
             }
@@ -270,6 +181,181 @@ func init() {
     {
       "description": "Authentication stuff",
       "name": "auth"
+    },
+    {
+      "description": "User API",
+      "name": "users"
+    }
+  ]
+}`))
+	FlatSwaggerJSON = json.RawMessage([]byte(`{
+  "swagger": "2.0",
+  "info": {
+    "description": "The Core of a CEC Platform v2.\nThis service manages everything about factions, users/principals and access tokens. \nFind more at Close Encounters Corps Discord server!\n",
+    "title": "CEC Core",
+    "version": "0.1.0"
+  },
+  "basePath": "/v1",
+  "paths": {
+    "/login/discord": {
+      "get": {
+        "description": "Creates new Principal/User/Account using Discord.\nWorks in two phases: \n1. At first request it returns url to cec-auth.\n2. When cec-auth redirects you back to Core with state param, it responds with created user info\n   and your shiny new token.\n2.1. If you already authenticated, then discord account will just be attached to existing user.\n",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "auth"
+        ],
+        "summary": "Authenticate using Discord",
+        "operationId": "loginDiscord",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Second phase: State to fetch from CEC Auth",
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "type": "string",
+            "description": "First phase: URL to redirect on a success of the second phase",
+            "name": "success_url",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Phase successful",
+            "schema": {
+              "$ref": "#/definitions/AuthPhaseResult"
+            }
+          },
+          "400": {
+            "description": "User input error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          }
+        }
+      }
+    },
+    "/users/current": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "users"
+        ],
+        "summary": "Get current user",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Auth token",
+            "name": "X-Auth-Token",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User found",
+            "schema": {
+              "$ref": "#/definitions/User"
+            }
+          },
+          "400": {
+            "description": "Invalid token",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "AuthPhaseResult": {
+      "type": "object",
+      "properties": {
+        "next_url": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "token": {
+          "type": "string"
+        },
+        "user": {
+          "$ref": "#/definitions/User"
+        }
+      }
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        }
+      }
+    },
+    "Principal": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "boolean"
+        },
+        "created_on": {
+          "type": "string"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "last_login": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        }
+      }
+    },
+    "User": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "principal": {
+          "$ref": "#/definitions/Principal"
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Authentication stuff",
+      "name": "auth"
+    },
+    {
+      "description": "User API",
+      "name": "users"
     }
   ]
 }`))

@@ -20,6 +20,7 @@ import (
 	"github.com/go-openapi/swag"
 
 	"github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations/auth"
+	"github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations/users"
 )
 
 // NewCecCoreAPI creates a new CecCore instance
@@ -44,6 +45,9 @@ func NewCecCoreAPI(spec *loads.Document) *CecCoreAPI {
 
 		JSONProducer: runtime.JSONProducer(),
 
+		UsersGetUsersCurrentHandler: users.GetUsersCurrentHandlerFunc(func(params users.GetUsersCurrentParams) middleware.Responder {
+			return middleware.NotImplemented("operation users.GetUsersCurrent has not yet been implemented")
+		}),
 		AuthLoginDiscordHandler: auth.LoginDiscordHandlerFunc(func(params auth.LoginDiscordParams) middleware.Responder {
 			return middleware.NotImplemented("operation auth.LoginDiscord has not yet been implemented")
 		}),
@@ -86,6 +90,8 @@ type CecCoreAPI struct {
 	//   - application/json
 	JSONProducer runtime.Producer
 
+	// UsersGetUsersCurrentHandler sets the operation handler for the get users current operation
+	UsersGetUsersCurrentHandler users.GetUsersCurrentHandler
 	// AuthLoginDiscordHandler sets the operation handler for the login discord operation
 	AuthLoginDiscordHandler auth.LoginDiscordHandler
 
@@ -165,6 +171,9 @@ func (o *CecCoreAPI) Validate() error {
 		unregistered = append(unregistered, "JSONProducer")
 	}
 
+	if o.UsersGetUsersCurrentHandler == nil {
+		unregistered = append(unregistered, "users.GetUsersCurrentHandler")
+	}
 	if o.AuthLoginDiscordHandler == nil {
 		unregistered = append(unregistered, "auth.LoginDiscordHandler")
 	}
@@ -256,6 +265,10 @@ func (o *CecCoreAPI) initHandlerCache() {
 		o.handlers = make(map[string]map[string]http.Handler)
 	}
 
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/users/current"] = users.NewGetUsersCurrent(o.context, o.UsersGetUsersCurrentHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}

@@ -3,14 +3,17 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/Close-Encounters-Corps/cec-core/gen/models"
 	"github.com/Close-Encounters-Corps/cec-core/gen/restapi"
 	"github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations"
 	"github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations/auth"
+	apiusers "github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations/users"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/auth/tokens"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/config"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/discord"
@@ -22,6 +25,7 @@ import (
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/swag"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Module interface {
@@ -50,6 +54,29 @@ func (app *Application) Start() {
 	}
 }
 
+type RequestHelper struct {
+	Req     *http.Request
+	Ctx     context.Context
+	Span    trace.Span
+	TraceID string
+}
+
+func NewRequestHelper(req *http.Request, path string) *RequestHelper {
+	ctx, span := tracer.NewSpan(req.Context(), path, nil)
+	return &RequestHelper{
+		Req:     req,
+		Ctx:     ctx,
+		Span:    span,
+		TraceID: span.SpanContext().TraceID().String(),
+	}
+}
+
+func (help *RequestHelper) InternalError(err error) {
+	tracer.AddSpanError(help.Span, err)
+	tracer.FailSpan(help.Span, "internal error")
+	log.Printf("[%s] error: %s", help.TraceID, err)
+}
+
 func (app *Application) Server() (*restapi.Server, error) {
 	swagger, err := loads.Analyzed(restapi.SwaggerJSON, "")
 	if err != nil {
@@ -62,15 +89,12 @@ func (app *Application) Server() (*restapi.Server, error) {
 	api := operations.NewCecCoreAPI(swagger)
 	api.AuthLoginDiscordHandler = auth.LoginDiscordHandlerFunc(
 		func(ldp auth.LoginDiscordParams) middleware.Responder {
-			ctx, span := tracer.NewSpan(ldp.HTTPRequest.Context(), "/login/discord", nil)
-			defer span.End()
-			traceId := span.SpanContext().TraceID().String()
+			help := NewRequestHelper(ldp.HTTPRequest, "/login/discord")
+			defer help.Span.End()
 			internalError := func(err error) middleware.Responder {
-				tracer.AddSpanError(span, err)
-				tracer.FailSpan(span, "internal error")
-				log.Printf("[%s] error: %s", traceId, err)
+				help.InternalError(err)
 				return auth.NewLoginDiscordInternalServerError().WithPayload(&models.Error{
-					RequestID: traceId,
+					RequestID: help.TraceID,
 				})
 			}
 			state := swag.StringValue(ldp.State)
@@ -93,13 +117,13 @@ func (app *Application) Server() (*restapi.Server, error) {
 				}
 				return auth.NewLoginDiscordOK().WithPayload(&result)
 			}
-			tracer.AddSpanTags(span, map[string]string{"state": state})
-			token, err := facade.Authenticate(ctx, "discord", state)
+			tracer.AddSpanTags(help.Span, map[string]string{"state": state})
+			token, err := facade.Authenticate(help.Ctx, "discord", state)
 			if err != nil {
 				if err.Error() == "state not found" {
 					return auth.NewLoginDiscordBadRequest().WithPayload(&models.Error{
-						Message: "state not found",
-						RequestID: traceId,
+						Message:   "state not found",
+						RequestID: help.TraceID,
 					})
 				}
 				return internalError(err)
@@ -111,9 +135,30 @@ func (app *Application) Server() (*restapi.Server, error) {
 			return auth.NewLoginDiscordOK().WithPayload(&result)
 		},
 	)
+	api.UsersGetUsersCurrentHandler = apiusers.GetUsersCurrentHandlerFunc(
+		func(gucp apiusers.GetUsersCurrentParams) middleware.Responder {
+			help := NewRequestHelper(gucp.HTTPRequest, "/users/current")
+			defer help.Span.End()
+			user, err := facade.CurrentUser(help.Ctx, *gucp.XAuthToken)
+			if err != nil {
+				help.InternalError(err)
+				return apiusers.NewGetUsersCurrentInternalServerError().WithPayload(
+					&models.Error{RequestID: help.TraceID},
+				)
+			}
+			return apiusers.NewGetUsersCurrentOK().WithPayload(&models.User{
+				ID: int64(user.Id),
+				Principal: &models.Principal{
+					ID: int64(user.Principal.Id),
+					Admin: user.Principal.Admin,
+					CreatedOn: user.Principal.CreatedOn.Format(time.RFC3339),
+					LastLogin: user.Principal.LastLogin.Format(time.RFC3339),
+					State: user.Principal.State,
+				},
+			})
+		},
+	)
 	server := restapi.NewServer(api)
-	server.ConfigureAPI()
-	server.SetHandler(tracer.HTTPHandler(server.GetHandler(), "/v1"))
 	server.Port = app.Config.Listen
 	return server, nil
 }

@@ -11,6 +11,8 @@ basePath: "/v1"
 tags:
 - name: "auth"
   description: "Authentication stuff"
+- name: users
+  description: User API
 paths:
   /login/discord:
     get:
@@ -51,7 +53,31 @@ paths:
           description: "User input error"
           schema:
             $ref: "#/definitions/Error"
-
+  /users/current:
+    get:
+      summary: Get current user
+      tags:
+      - users
+      produces:
+      - application/json
+      parameters:
+      - in: header
+        name: X-Auth-Token
+        type: string
+        description: Auth token
+      responses:
+        "500":
+          description: "Internal error"
+          schema:
+            $ref: "#/definitions/Error"
+        "200":
+          description: "User found"
+          schema:
+            $ref: "#/definitions/User"
+        "400":
+          description: "Invalid token"
+          schema:
+            $ref: "#/definitions/Error"
 definitions:
   Error:
     type: object

@@ -6,8 +6,10 @@ import (
 	"log"
 	"time"
 
+	"github.com/Close-Encounters-Corps/cec-core/pkg/api"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/items"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/principal"
+	"github.com/Close-Encounters-Corps/cec-core/pkg/tracer"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -44,6 +46,33 @@ func (m *UserModule) NewUser(ctx context.Context, tx pgx.Tx) (*items.User, error
 	log.Println("created new user with id", usr.Id)
 	usr.Principal = princ
 	return &usr, nil
+}
+
+func (m *UserModule) FindOneByPrincipal(ctx context.Context, id uint64, db api.DbConn) (*items.User, error) {
+	ctx, span := tracer.NewSpan(ctx, "user.find_one_by_pid", nil)
+	defer span.End()
+	p := &items.Principal{Id: id}
+	out := &items.User{
+		Principal: p,
+	}
+	err := db.QueryRow(ctx, `
+	SELECT u.id, p.is_admin, p.created_on, p.last_login, p.state 
+	FROM users u
+	JOIN principals p ON u.principal_id = p.id
+	WHERE p.id = $1	
+	`, id).Scan(
+		&out.Id, 
+		&out.Principal.Admin, 
+		&out.Principal.CreatedOn, 
+		&out.Principal.LastLogin, 
+		&out.Principal.State,
+	)
+	if err != nil {
+		tracer.AddSpanError(span, err)
+		tracer.FailSpan(span, "internal error")
+		return nil, err
+	}
+	return out, nil
 }
 
 func (m *UserModule) FindOne(ctx context.Context, id uint64, tx pgx.Tx) (*items.User, error) {

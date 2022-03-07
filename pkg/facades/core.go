@@ -3,6 +3,7 @@ package facades
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/Close-Encounters-Corps/cec-core/pkg/items"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/tracer"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/users"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -164,4 +166,29 @@ func (f *CoreFacade) Authenticate(ctx context.Context, kind string, state string
 	}
 	err = tx.Commit(ctx)
 	return token, err
+}
+
+func (f *CoreFacade) CurrentUser(ctx context.Context, token string) (*items.User, error) {
+	ctx, span := tracer.NewSpan(ctx, "core.currentuser", nil)
+	defer span.End()
+	pid, err := f.tokens.FindPrincipalID(ctx, f.db, token)
+	span.AddEvent("PID found", trace.WithAttributes(
+		attribute.Int64("principal.id", int64(pid)),
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("invalid token")
+		}
+		tracer.AddSpanError(span, err)
+		tracer.FailSpan(span, "internal error")
+		return nil, err
+	}
+	user, err := f.users.FindOneByPrincipal(ctx, pid, f.db)
+	if err != nil {
+		return nil, err
+	}
+	span.AddEvent("User found", trace.WithAttributes(
+		attribute.Int64("user.id", int64(user.Id)),
+	))
+	return user, err
 }

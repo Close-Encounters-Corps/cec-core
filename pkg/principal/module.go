@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Close-Encounters-Corps/cec-core/pkg/items"
+	"github.com/Close-Encounters-Corps/cec-core/pkg/tracer"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -52,4 +53,24 @@ func (m *PrincipalModule) Save(ctx context.Context, p *items.Principal, tx pgx.T
 	WHERE id = $1
 	`, p.Id, p.Admin, p.CreatedOn, p.State)
 	return err
+}
+
+func (m *PrincipalModule) FindOne(ctx context.Context, tx pgx.Tx, id uint64) (*items.Principal, error) {
+	ctx, span := tracer.NewSpan(ctx, "principals.findone", nil)
+	defer span.End()
+	p := items.Principal{Id: id}
+	err := tx.QueryRow(ctx, `
+	SELECT (
+		is_admin,
+		created_on,
+		last_login,
+		state
+	) FROM principals WHERE id = $1
+	`, id).Scan(&p.Admin, &p.CreatedOn, &p.LastLogin, &p.State)
+	if err != nil {
+		tracer.AddSpanError(span, err)
+		tracer.FailSpan(span, "query error")
+		return nil, err
+	}
+	return &p, err
 }

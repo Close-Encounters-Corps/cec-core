@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 
+	"github.com/Close-Encounters-Corps/cec-core/pkg/api"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/items"
+	"github.com/Close-Encounters-Corps/cec-core/pkg/tracer"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -37,4 +39,20 @@ func (m *TokenModule) NewToken(ctx context.Context, p *items.Principal, tx pgx.T
 		return "", err
 	}
 	return token, nil
+}
+
+func (m *TokenModule) FindPrincipalID(ctx context.Context, db api.DbConn, token string) (uint64, error) {
+	ctx, span := tracer.NewSpan(ctx, "tokens.find_principal_id", nil)
+	defer span.End()
+	var id uint64
+	err := db.QueryRow(ctx, `
+		SELECT principal_id FROM access_tokens
+		WHERE token = $1 AND ((expires IS NOT NULL AND expires > now()) OR expires IS NULL)
+	`, token).Scan(&id)
+	if err != nil {
+		tracer.AddSpanError(span, err)
+		tracer.FailSpan(span, "query error")
+		return 0, err
+	}
+	return id, nil
 }
