@@ -139,7 +139,16 @@ func (app *Application) Server() (*restapi.Server, error) {
 		func(gucp apiusers.GetUsersCurrentParams) middleware.Responder {
 			help := NewRequestHelper(gucp.HTTPRequest, "/users/current")
 			defer help.Span.End()
-			user, err := facade.CurrentUser(help.Ctx, *gucp.XAuthToken)
+			token := swag.StringValue(gucp.XAuthToken)
+			if token == "" {
+				return apiusers.NewGetUsersCurrentBadRequest().WithPayload(
+					&models.Error{
+						Message:   "token not provided",
+						RequestID: help.TraceID,
+					},
+				)
+			}
+			user, err := facade.CurrentUser(help.Ctx, token)
 			if err != nil {
 				help.InternalError(err)
 				return apiusers.NewGetUsersCurrentInternalServerError().WithPayload(
@@ -149,11 +158,11 @@ func (app *Application) Server() (*restapi.Server, error) {
 			return apiusers.NewGetUsersCurrentOK().WithPayload(&models.User{
 				ID: int64(user.Id),
 				Principal: &models.Principal{
-					ID: int64(user.Principal.Id),
-					Admin: user.Principal.Admin,
+					ID:        int64(user.Principal.Id),
+					Admin:     user.Principal.Admin,
 					CreatedOn: user.Principal.CreatedOn.Format(time.RFC3339),
 					LastLogin: user.Principal.LastLogin.Format(time.RFC3339),
-					State: user.Principal.State,
+					State:     user.Principal.State,
 				},
 			})
 		},
