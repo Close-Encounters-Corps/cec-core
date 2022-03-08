@@ -1,9 +1,9 @@
 package items
 
 type User struct {
-	Id          uint64
-	Principal   *Principal
-	Discord     *DiscordAccount
+	Id        uint64          `json:"id"`
+	Principal *Principal      `json:"principal,omitempty"`
+	Discord   *DiscordAccount `json:"discord,omitempty"`
 }
 
 var (
