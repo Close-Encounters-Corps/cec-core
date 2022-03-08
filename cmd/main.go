@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -112,10 +113,9 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	defer server.Shutdown()
 	log.Println("Commit:", COMMITSHA)
 	log.Println("Ready.")
-	if err := server.Serve(); err != nil {
+	if err := server.Run(fmt.Sprintf(":%v", port)); err != nil {
 		cancel()
 		log.Fatalln(err)
 	}
