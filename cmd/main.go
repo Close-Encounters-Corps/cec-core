@@ -3,29 +3,20 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
-	"net/url"
 	"os"
 	"strconv"
-	"time"
 
-	"github.com/Close-Encounters-Corps/cec-core/gen/models"
-	"github.com/Close-Encounters-Corps/cec-core/gen/restapi"
-	"github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations"
-	"github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations/auth"
-	apiusers "github.com/Close-Encounters-Corps/cec-core/gen/restapi/operations/users"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/auth/tokens"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/config"
+	"github.com/Close-Encounters-Corps/cec-core/pkg/controllers"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/discord"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/facades"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/principal"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/tracer"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/users"
-	"github.com/go-openapi/loads"
-	"github.com/go-openapi/runtime/middleware"
-	"github.com/go-openapi/swag"
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 type Module interface {
@@ -54,122 +45,23 @@ func (app *Application) Start() {
 	}
 }
 
-type RequestHelper struct {
-	Req     *http.Request
-	Ctx     context.Context
-	Span    trace.Span
-	TraceID string
-}
 
-func NewRequestHelper(req *http.Request, path string) *RequestHelper {
-	ctx, span := tracer.NewSpan(req.Context(), path, nil)
-	return &RequestHelper{
-		Req:     req,
-		Ctx:     ctx,
-		Span:    span,
-		TraceID: span.SpanContext().TraceID().String(),
-	}
-}
 
-func (help *RequestHelper) InternalError(err error) {
-	tracer.AddSpanError(help.Span, err)
-	tracer.FailSpan(help.Span, "internal error")
-	log.Printf("[%s] error: %s", help.TraceID, err)
-}
-
-func (app *Application) Server() (*restapi.Server, error) {
-	swagger, err := loads.Analyzed(restapi.SwaggerJSON, "")
-	if err != nil {
-		return nil, err
-	}
+func (app *Application) Server() (*gin.Engine, error) {
 	dm := app.Modules[discord.MODULE_NAME].(*discord.DiscordModule)
 	um := app.Modules[users.MODULE_NAME].(*users.UserModule)
 	tm := app.Modules[tokens.MODULE_NAME].(*tokens.TokenModule)
 	facade := facades.NewCoreFacade(app.Db, um, dm, tm, app.Config)
-	api := operations.NewCecCoreAPI(swagger)
-	api.AuthLoginDiscordHandler = auth.LoginDiscordHandlerFunc(
-		func(ldp auth.LoginDiscordParams) middleware.Responder {
-			help := NewRequestHelper(ldp.HTTPRequest, "/login/discord")
-			defer help.Span.End()
-			internalError := func(err error) middleware.Responder {
-				help.InternalError(err)
-				return auth.NewLoginDiscordInternalServerError().WithPayload(&models.Error{
-					RequestID: help.TraceID,
-				})
-			}
-			state := swag.StringValue(ldp.State)
-			if state == "" {
-				// respond with cec-auth url as nextURL
-				u, err := url.Parse(app.Config.AuthExternalUrl)
-				if err != nil {
-					return internalError(err)
-				}
-				u, err = u.Parse("/oauth/discord")
-				if err != nil {
-					return internalError(err)
-				}
-				q := u.Query()
-				q.Add("redirect_url", swag.StringValue(ldp.SuccessURL))
-				u.RawQuery = q.Encode()
-				result := models.AuthPhaseResult{
-					Phase:   1,
-					NextURL: u.String(),
-				}
-				return auth.NewLoginDiscordOK().WithPayload(&result)
-			}
-			tracer.AddSpanTags(help.Span, map[string]string{"state": state})
-			token, err := facade.Authenticate(help.Ctx, "discord", state)
-			if err != nil {
-				if err.Error() == "state not found" {
-					return auth.NewLoginDiscordBadRequest().WithPayload(&models.Error{
-						Message:   "state not found",
-						RequestID: help.TraceID,
-					})
-				}
-				return internalError(err)
-			}
-			result := models.AuthPhaseResult{
-				Phase: 2,
-				Token: token,
-			}
-			return auth.NewLoginDiscordOK().WithPayload(&result)
-		},
-	)
-	api.UsersGetUsersCurrentHandler = apiusers.GetUsersCurrentHandlerFunc(
-		func(gucp apiusers.GetUsersCurrentParams) middleware.Responder {
-			help := NewRequestHelper(gucp.HTTPRequest, "/users/current")
-			defer help.Span.End()
-			token := swag.StringValue(gucp.XAuthToken)
-			if token == "" {
-				return apiusers.NewGetUsersCurrentBadRequest().WithPayload(
-					&models.Error{
-						Message:   "token not provided",
-						RequestID: help.TraceID,
-					},
-				)
-			}
-			user, err := facade.CurrentUser(help.Ctx, token)
-			if err != nil {
-				help.InternalError(err)
-				return apiusers.NewGetUsersCurrentInternalServerError().WithPayload(
-					&models.Error{RequestID: help.TraceID},
-				)
-			}
-			return apiusers.NewGetUsersCurrentOK().WithPayload(&models.User{
-				ID: int64(user.Id),
-				Principal: &models.Principal{
-					ID:        int64(user.Principal.Id),
-					Admin:     user.Principal.Admin,
-					CreatedOn: user.Principal.CreatedOn.Format(time.RFC3339),
-					LastLogin: user.Principal.LastLogin.Format(time.RFC3339),
-					State:     user.Principal.State,
-				},
-			})
-		},
-	)
-	server := restapi.NewServer(api)
-	server.Port = app.Config.Listen
-	return server, nil
+	ctrl := controllers.CoreController{
+		Facade: facade,
+		Config: app.Config,
+	}
+	r := gin.Default()
+	v1 := r.Group("/v1")
+	v1.Use(otelgin.Middleware("v1"))
+	v1.GET("/login/discord", ctrl.LoginDiscord)
+	v1.GET("/users/current", ctrl.CurrentUser)
+	return r, nil
 }
 
 func main() {
