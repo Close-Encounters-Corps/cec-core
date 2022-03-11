@@ -172,9 +172,6 @@ func (f *CoreFacade) CurrentUser(ctx context.Context, token string) (*items.User
 	ctx, span := tracer.NewSpan(ctx, "core.currentuser", nil)
 	defer span.End()
 	pid, err := f.tokens.FindPrincipalID(ctx, f.db, token)
-	span.AddEvent("PID found", trace.WithAttributes(
-		attribute.Int64("principal.id", int64(pid)),
-	))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("invalid token")
@@ -183,6 +180,9 @@ func (f *CoreFacade) CurrentUser(ctx context.Context, token string) (*items.User
 		tracer.FailSpan(span, "internal error")
 		return nil, err
 	}
+	span.AddEvent("PID found", trace.WithAttributes(
+		attribute.Int64("principal.id", int64(pid)),
+	))
 	user, err := f.users.FindOneByPrincipal(ctx, pid, f.db)
 	if err != nil {
 		return nil, err
@@ -191,4 +191,25 @@ func (f *CoreFacade) CurrentUser(ctx context.Context, token string) (*items.User
 		attribute.Int64("user.id", int64(user.Id)),
 	))
 	return user, err
+}
+
+func (f *CoreFacade) PromoteToAdmin(ctx context.Context, token string) error {
+	ctx, span := tracer.NewSpan(ctx, "core.promote_admin", nil)
+	defer span.End()
+	pid, err := f.tokens.FindPrincipalID(ctx, f.db, token)
+	if err != nil {
+		return err
+	}
+	span.AddEvent("PID found", trace.WithAttributes(
+		attribute.Int64("principal.id", int64(pid)),
+	))
+	user, err := f.users.FindOneByPrincipal(ctx, pid, f.db)
+	if err != nil {
+		return err
+	}
+	span.AddEvent("User found", trace.WithAttributes(
+		attribute.Int64("user.id", int64(user.Id)),
+	))
+	user.Principal.Admin = true
+	return f.users.Save(ctx, user, f.db)
 }

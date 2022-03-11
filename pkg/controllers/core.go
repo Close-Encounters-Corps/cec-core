@@ -97,7 +97,7 @@ func (ctrl *CoreController) LoginDiscord(c *gin.Context) {
 
 
 func (ctrl *CoreController) CurrentUser(c *gin.Context) {
-	help := NewRequestHelper(c, "/users/current")
+	help := NewRequestHelper(c, "controller.users.current")
 	defer help.Span.End()
 	token := c.Request.Header.Get("X-Auth-Token")
 	if token == "" {
@@ -113,4 +113,23 @@ func (ctrl *CoreController) CurrentUser(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, user)
+}
+
+func (ctrl *CoreController) PromoteToAdmin(c *gin.Context) {
+	help := NewRequestHelper(c, "controller.user.promote")
+	defer help.Span.End()
+	token := c.GetHeader("X-Auth-Token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, httpapi.Error{
+			Message: "token not provided",
+			RequestID: help.TraceID,
+		})
+		return
+	}
+	err := ctrl.Facade.PromoteToAdmin(help.Ctx, token)
+	if err != nil {
+		help.InternalError(err)
+		return
+	}
+	c.Status(http.StatusOK)
 }

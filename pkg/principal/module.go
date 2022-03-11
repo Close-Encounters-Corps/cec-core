@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Close-Encounters-Corps/cec-core/pkg/api"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/items"
 	"github.com/Close-Encounters-Corps/cec-core/pkg/tracer"
 	"github.com/jackc/pgx/v4"
@@ -44,7 +45,7 @@ func (m *PrincipalModule) NewPrincipal(ctx context.Context, tx pgx.Tx) (*items.P
 	return &p, nil
 }
 
-func (m *PrincipalModule) Save(ctx context.Context, p *items.Principal, tx pgx.Tx) error {
+func (m *PrincipalModule) Save(ctx context.Context, p *items.Principal, tx api.DbConn) error {
 	_, err := tx.Exec(ctx, `
 	UPDATE principals SET 
 		is_admin = $2,

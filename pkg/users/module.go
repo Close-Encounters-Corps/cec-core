@@ -132,3 +132,7 @@ func (m *UserModule) FindAll(ctx context.Context, ids []uint64, detailed bool, t
 	}
 	return out, nil
 }
+
+func (m *UserModule) Save(ctx context.Context, user *items.User, tx api.DbConn) error {
+	return m.pm.Save(ctx, user.Principal, tx)
+}
